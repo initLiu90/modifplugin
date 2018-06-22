@@ -1,0 +1,19 @@
+apply plugin: 'groovy'
+apply plugin: 'maven'
+
+uploadArchives{
+    repositories{
+        flatDir{
+            name "modifyplugin"
+            dir "D:/Workspace/Android/Maven/modifyplugin/libs"
+        }
+    }
+}
+
+group = "com.lzp.modifyplugin"//project属性
+version = '1.0'
+
+dependencies {
+    implementation gradleApi()//gradle sdk
+    implementation localGroovy()
+}
