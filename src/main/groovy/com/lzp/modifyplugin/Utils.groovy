@@ -1,7 +1,7 @@
 package com.lzp.modifyplugin;
 
 final class Utils {
-     static byte[] copyByte(byte[] src, int start, int len) {
+    static byte[] copyByte(byte[] src, int start, int len) {
         if (src == null) return null;
 
         if (start > src.length) return null;
@@ -20,7 +20,7 @@ final class Utils {
     }
 
 
-     static short byte2Short(byte[] b) {
+    static short byte2Short(byte[] b) {
         short s = 0;
         short s0 = (short) (b[0] & 0xff);
         short s1 = (short) (b[1] & 0xff);
@@ -50,7 +50,7 @@ final class Utils {
         return result;
     }
 
-    static String packageName2Path(String packageName){
-        return packageName.replace('.', '\\')
+    static String packageName2Path(String packageName) {
+        return packageName.replace('.', File.separator)
     }
 }

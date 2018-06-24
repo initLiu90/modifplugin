@@ -35,11 +35,16 @@ class ModifyArscR implements Plugin<Project> {
                             def end = task.name.indexOf("Resources")
                             def type = task.name.substring(start, end).toLowerCase()
 
-                            //change resources.arsc and apk file
                             def apkFileDir = project.getBuildDir().absolutePath + File.separator + FD_INTERMEDIATES + File.separator + FD_RES + File.separator + type
-                            println("######## apkFileDir=" + apkFileDir)
+//                            def apkFileDir = project.getBuildDir().absolutePath + File.separator + FD_INTERMEDIATES + File.separator + FD_RES
                             def apkFile = new File(apkFileDir, "resources-" + type + ".ap_ ")
+                            println("######## apkFile=" + apkFile.getAbsolutePath())
+
+                            //change resources.arsc and apk file
                             modifyArsc(apkFile, packageId)
+
+                            //change AndroidManifest.xml
+                            modifyAndroidManifest(apkFile, packageId)
 
                             //change R.java
                             def rFileDir = project.getBuildDir().absolutePath + File.separator + FD_GENERATED +
@@ -55,14 +60,27 @@ class ModifyArscR implements Plugin<Project> {
     }
 
     def modifyArsc(File apkFile, int packageId) {
-        if (!apkFile.exists() || !apkFile.isFile())
+        if (!apkFile.exists() || !apkFile.isFile()) {
+            println("######## modifyArsc return " + apkFile.exists() + "," + apkFile.isFile())
             return
+        }
 
-        byte[] src = ArscFileUtils.getArscFileContentFromApk(apkFile)
-        byte[] newSrc = ArscFileUtils.changeArscPackageId(src, packageId)
-        File newArscFile = ArscFileUtils.generateNewArscFile(apkFile.getParent(), newSrc)
-        ArscFileUtils.replaceArscFile(apkFile, newArscFile)
+        byte[] src = ApkFileUtils.getArscFileContentFromApk(apkFile)
+        byte[] newSrc = ArscUtils.changeArscPackageId(src, packageId)
+        File newArscFile = ArscUtils.generateNewArscFile(apkFile.getParent(), newSrc)
+        ApkFileUtils.replaceArscFileInApk(apkFile, newArscFile)
         newArscFile.delete()
+    }
+
+    def modifyAndroidManifest(File apkFile, int packageId) {
+        println("######## modifyAndroidManifest")
+        if (!apkFile.exists() || !apkFile.isFile()) {
+            println("######## modifyAndroidManifest return " + apkFile.exists() + "," + apkFile.isFile())
+            return
+        }
+
+        byte[] src = ApkFileUtils.getAndroidManifestContentFromApk(apkFile)
+        AndroidManifestUtils.changePackageId(src, packageId)
     }
 
     def modifyRFile(File rFile, String packageId) {
