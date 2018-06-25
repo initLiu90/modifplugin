@@ -41,10 +41,12 @@ class ModifyArscR implements Plugin<Project> {
                             println("######## apkFile=" + apkFile.getAbsolutePath())
 
                             //change resources.arsc and apk file
-                            modifyArsc(apkFile, packageId)
+                            def newArscFile = modifyArsc(apkFile, packageId)
 
-                            //change AndroidManifest.xml
-                            modifyAndroidManifest(apkFile, packageId)
+                            //change AndroidManifest.xml res目录下的所有xml文件
+                            Map<String, File> xmlFiles = modifyXml(apkFile, packageId)
+
+                            replaceFileInApk(apkFile, xmlFiles, newArscFile)
 
                             //change R.java
                             def rFileDir = project.getBuildDir().absolutePath + File.separator + FD_GENERATED +
@@ -68,19 +70,33 @@ class ModifyArscR implements Plugin<Project> {
         byte[] src = ApkFileUtils.getArscFileContentFromApk(apkFile)
         byte[] newSrc = ArscUtils.changeArscPackageId(src, packageId)
         File newArscFile = ArscUtils.generateNewArscFile(apkFile.getParent(), newSrc)
-        ApkFileUtils.replaceArscFileInApk(apkFile, newArscFile)
-        newArscFile.delete()
+        return newArscFile
     }
 
-    def modifyAndroidManifest(File apkFile, int packageId) {
-        println("######## modifyAndroidManifest")
+    def modifyXml(File apkFile, int packageId) {
         if (!apkFile.exists() || !apkFile.isFile()) {
-            println("######## modifyAndroidManifest return " + apkFile.exists() + "," + apkFile.isFile())
-            return
+            println("######## modifyXml return " + apkFile.exists() + "," + apkFile.isFile())
+            return null
         }
 
-        byte[] src = ApkFileUtils.getAndroidManifestContentFromApk(apkFile)
-        AndroidManifestUtils.changePackageId(src, packageId)
+        LinkedHashMap<String, File> newXmlFiles = new LinkedHashMap<>()
+
+        def xmlEntrys = ApkFileUtils.getXmlFilesInApk(apkFile)
+        xmlEntrys.each {
+            byte[] src = ApkFileUtils.getEntryContentFromApk(apkFile, it)
+            XmlUtils.changePackageId(src, packageId)
+            def newXmlFile = XmlUtils.generateNewXmlFile(apkFile.getParent(), it.name, src)
+            newXmlFiles.put(it.name, newXmlFile)
+        }
+        return newXmlFiles
+    }
+
+    def replaceFileInApk(File apkFile, Map<String, File> xmlFiles, File newArscFile) {
+        ApkFileUtils.replaceFilesInApk(apkFile, xmlFiles, newArscFile)
+        newArscFile.delete()
+        xmlFiles.each { xmlFileEntry ->
+            xmlFileEntry.value.delete()
+        }
     }
 
     def modifyRFile(File rFile, String packageId) {
