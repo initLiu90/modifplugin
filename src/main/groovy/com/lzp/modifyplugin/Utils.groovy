@@ -53,4 +53,13 @@ final class Utils {
     static String packageName2Path(String packageName) {
         return packageName.replace('.', File.separator)
     }
+
+    static readFileContent(File file, int start, int len) {
+        byte[] buffer = new byte[len]
+        RandomAccessFile raFile = new RandomAccessFile(file, 'r')
+        raFile.seek(start)
+        raFile.read(buffer, 0, len)
+        raFile.close()
+        return buffer
+    }
 }

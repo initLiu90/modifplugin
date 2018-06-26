@@ -1,4 +1,7 @@
-package com.lzp.modifyplugin;
+package com.lzp.modifyplugin
+
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile;
 
 /**
  * Created by lillian on 2018/6/24.
@@ -7,45 +10,48 @@ package com.lzp.modifyplugin;
 public class ArscUtils {
     /**
      *
-     * @param src resources.arsc file conent
+     * @param apkFile
      * @param packageId new package id
      * @return resources.arsc file content with new package id
      */
-    static byte[] changeArscPackageId(byte[] src, int packageId) {
+    static changeArscPackageId(File arscFile, int packageId) {
+        //读取前8个byte，ResTable_header.ResChunk_header
+        byte[] src = Utils.readFileContent(arscFile, 0, 8)
         def resStringPoolChunkOffset = getResChunk_header_headerSize(src, 0)
-        def packageChunkOffset = resStringPoolChunkOffset + getResChunk_header_chunkSize(src, resStringPoolChunkOffset)
+
+        //读取ResStringPool_header.ResChunk_header,8Byte
+        src = Utils.readFileContent(arscFile, resStringPoolChunkOffset, 8)
+        def packageChunkOffset = resStringPoolChunkOffset + getResChunk_header_chunkSize(src, 0)
 
         def resTable_package_header_size = 8
 
         def packageIdOffset = packageChunkOffset + resTable_package_header_size
 
-        def oldPackageId = Utils.byte2int(Utils.copyByte(src, packageIdOffset, 4))
+        src = Utils.readFileContent(arscFile, packageIdOffset, 4)
+        def oldPackageId = Utils.byte2int(Utils.copyByte(src, 0, 4))
+        Log.log("changeArscPackageId", "oldPackageId=" + oldPackageId)
 
-        if (oldPackageId != packageId) {
-            def newSrc = new byte[src.length]
+        if (oldPackageId == 127 && oldPackageId != packageId) {
             def newIdBytes = Utils.int2ByteArray(packageId)
-
-            for (def i = 0; i < src.length; i++) {
-                if (i >= packageIdOffset && i < packageIdOffset + 4) {
-                    int index = i - packageIdOffset;
-                    newSrc[i] = newIdBytes[index];
-                } else {
-                    newSrc[i] = src[i];
-                }
-            }
-            return newSrc
+            changeArscFileContent(arscFile, newIdBytes, packageIdOffset, 4)
         }
-        return src
     }
 
-    static generateNewArscFile(String path, byte[] src) {
-        def arscFile = new File(path, "resources.arsc")
-        arscFile.withOutputStream {
-            it.write(src)
-            it.flush()
-        }
-        return arscFile
+    /**
+     *
+     * @param arscFile
+     * @param newPackageId 新的packageId
+     * @param start packageId的开始位置
+     * @param len长度
+     * @return
+     */
+    private static changeArscFileContent(File arscFile, byte[] newPackageId, int start, int len) {
+        RandomAccessFile raFile = new RandomAccessFile(arscFile, 'rw')
+        raFile.seek(start)
+        raFile.write(newPackageId)
+        raFile.close()
     }
+
 
     private static getResChunk_header_headerSize(byte[] src, int start) {
         def headerSizeByte = Utils.copyByte(src, start + 2, 2)

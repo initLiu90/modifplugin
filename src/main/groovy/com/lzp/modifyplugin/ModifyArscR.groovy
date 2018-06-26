@@ -3,6 +3,8 @@ package com.lzp.modifyplugin
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
+import java.lang.reflect.Field
+
 class ModifyArscR implements Plugin<Project> {
 
     private static final String FD_RES = "res"
@@ -40,20 +42,30 @@ class ModifyArscR implements Plugin<Project> {
                             def apkFile = new File(apkFileDir, "resources-" + type + ".ap_ ")
                             println("######## apkFile=" + apkFile.getAbsolutePath())
 
+                            //extract all files from apk
+                            def allFiles = ApkFileUtils.extractFilesFromApk(apkFile)
+//                            allFiles.each { fileEntry ->
+//                                Log.log(fileEntry.key, fileEntry.value.absolutePath)
+//                            }
+
                             //change resources.arsc and apk file
-                            def newArscFile = modifyArsc(apkFile, packageId)
+                            def arscFile = allFiles.get('resources.arsc')
+                            modifyArsc(arscFile, packageId)
 
                             //change AndroidManifest.xml res目录下的所有xml文件
-                            Map<String, File> xmlFiles = modifyXml(apkFile, packageId)
+                            def xmlFiles = [:]
+                            allFiles.each { entry ->
+                                entry.key.endsWith('.xml')
+                                xmlFiles.put(entry.key, entry.value)
+                            }
+                            modifyXml(xmlFiles, packageId)
 
-                            replaceFileInApk(apkFile, xmlFiles, newArscFile)
+                            replaceFileInApk(apkFile, allFiles)
 
                             //change R.java
-                            def rFileDir = project.getBuildDir().absolutePath + File.separator + FD_GENERATED +
-                                    File.separator + FD_SOURCE + File.separator + FD_R + File.separator + type +
-                                    File.separator + Utils.packageName2Path(project.android.defaultConfig.applicationId)
-                            def rFile = new File(rFileDir, "R.java")
-                            modifyRFile(rFile, project.modify.packageId)
+                            def rFileDir = new File(project.getBuildDir().absolutePath + File.separator + FD_GENERATED +
+                                    File.separator + FD_SOURCE + File.separator + FD_R + File.separator + type)
+                            modifyRFile(rFileDir, project.modify.packageId)
                         }
                     }
                 }
@@ -61,46 +73,38 @@ class ModifyArscR implements Plugin<Project> {
         }
     }
 
-    def modifyArsc(File apkFile, int packageId) {
-        if (!apkFile.exists() || !apkFile.isFile()) {
-            println("######## modifyArsc return " + apkFile.exists() + "," + apkFile.isFile())
-            return
-        }
-
-        byte[] src = ApkFileUtils.getArscFileContentFromApk(apkFile)
-        byte[] newSrc = ArscUtils.changeArscPackageId(src, packageId)
-        File newArscFile = ArscUtils.generateNewArscFile(apkFile.getParent(), newSrc)
-        return newArscFile
+    def modifyArsc(File arscFile, int packageId) {
+//        Log.log("modifyArsc", arscFile.absolutePath)
+        ArscUtils.changeArscPackageId(arscFile, packageId)
     }
 
-    def modifyXml(File apkFile, int packageId) {
-        if (!apkFile.exists() || !apkFile.isFile()) {
-            println("######## modifyXml return " + apkFile.exists() + "," + apkFile.isFile())
-            return null
-        }
-
-        LinkedHashMap<String, File> newXmlFiles = new LinkedHashMap<>()
-
-        def xmlEntrys = ApkFileUtils.getXmlFilesInApk(apkFile)
-        xmlEntrys.each {
-            byte[] src = ApkFileUtils.getEntryContentFromApk(apkFile, it)
-            XmlUtils.changePackageId(src, packageId)
-            def newXmlFile = XmlUtils.generateNewXmlFile(apkFile.getParent(), it.name, src)
-            newXmlFiles.put(it.name, newXmlFile)
-        }
-        return newXmlFiles
-    }
-
-    def replaceFileInApk(File apkFile, Map<String, File> xmlFiles, File newArscFile) {
-        ApkFileUtils.replaceFilesInApk(apkFile, xmlFiles, newArscFile)
-        newArscFile.delete()
-        xmlFiles.each { xmlFileEntry ->
-            xmlFileEntry.value.delete()
+    def modifyXml(Map<String, File> xmlFiles, int packageId) {
+        xmlFiles.each { entry ->
+            XmlUtils.changePackageId(entry.value, packageId)
         }
     }
 
-    def modifyRFile(File rFile, String packageId) {
-        def tmpFile = new File(rFile.parent, 'tmpR.java')
+    def replaceFileInApk(File apkFile, Map<String, File> allFiles) {
+        ApkFileUtils.replaceFilesInApk(apkFile, allFiles)
+
+        allFiles.each { fileEntry ->
+            fileEntry.value.delete()
+        }
+    }
+
+    def modifyRFile(File rDir, String packageId) {
+        rDir.eachFile { file ->
+//            Log.log('modifyRFile', file.absolutePath)
+            if (file.isFile() && file.name.equals("R.java")) {
+                realModifyRFile(file, packageId)
+            } else if (file.isDirectory()) {
+                modifyRFile(file, packageId)
+            }
+        }
+    }
+
+    private realModifyRFile(File rFile, String packageId) {
+        def tmpFile = new File(rFile.parent, 'R.ja_')
         def writer = new BufferedWriter(new FileWriter(tmpFile))
 
         rFile.eachLine { line ->

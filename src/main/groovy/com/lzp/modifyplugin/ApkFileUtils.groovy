@@ -5,12 +5,67 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream;
 
 class ApkFileUtils {
-    static byte[] getArscFileContentFromApk(File apkFile) {
+    static extractFilesFromApk(File apkFile){
+        def files = [:]
+
+        def zipFile = new ZipFile(apkFile)
+        def entrys = zipFile.entries()
+
+        while (entrys.hasMoreElements()) {
+            def zipEntry = entrys.nextElement()
+            def file = new File(apkFile.getParent(), zipEntry.name)
+            if (!file.getParentFile().exists()) {
+                file.getParentFile().mkdirs()
+            }
+            def os = file.newOutputStream()
+
+            def is = zipFile.getInputStream(zipEntry)
+            def len = -1
+            def buffer = new byte[1024]
+            while ((len = is.read(buffer)) != -1) {
+                os.write(buffer, 0, len)
+                os.flush()
+            }
+            os.close()
+            is.close()
+
+            files.put(zipEntry.name, file)
+        }
+        return files
+    }
+//    static extractArscFileFromApk(File apkFile) {
+//        ZipFile zipFile = new ZipFile(apkFile)
+//        ZipEntry arscEntry = zipFile.getEntry("resources.arsc")
+//
+//        def arscFile = new File(apkFile.getParent(), "resources.arsc")
+//        OutputStream os = arscFile.newOutputStream()
+//
+//        InputStream is = zipFile.getInputStream(arscEntry);
+//        int len = -1;
+//        byte[] buffer = new byte[1024]
+//        while ((len = is.read(buffer)) != -1) {
+//            os.write(buffer, 0, len)
+//            os.flush()
+//        }
+//        os.close()
+//        is.close()
+//        return arscFile
+//    }
+
+    static byte[] getArscFileContentFromApk(File apkFile, int offset, int len) {
         ZipFile zipFile = new ZipFile(apkFile)
         ZipEntry arscEntry = zipFile.getEntry("resources.arsc")
 
-        byte[] buffer = new byte[arscEntry.size]
-        int len = zipFile.getInputStream(arscEntry).read(buffer)
+        Log.log("getArscFileContentFromApk:", "offset=" + offset + ",len=" + len + ",size=" + arscEntry.size)
+
+        if (offset > arscEntry.size) return null
+
+        if (offset + len > arscEntry.size) len = arscEntry.size - offset
+
+        if (len == 0) return null
+
+        byte[] buffer = new byte[len]
+        zipFile.getInputStream(arscEntry).read(buffer, offset, len)
 
         zipFile.close()
         return buffer
@@ -26,83 +81,54 @@ class ApkFileUtils {
         return buffer
     }
 
-    static getXmlFilesInApk(File apkFile) {
-        def xmlEntrys = new ArrayList()
+//    static extractXmlFilesInApk(File apkFile) {
+//        def xmlFiles = [:]
+//
+//        def zipFile = new ZipFile(apkFile)
+//        def entrys = zipFile.entries()
+//
+//        while (entrys.hasMoreElements()) {
+//            def zipEntry = entrys.nextElement()
+//            if (zipEntry.name.endsWith(".xml")) {
+//
+//                def file = new File(apkFile.getParent(), zipEntry.name)
+//                if (!file.getParentFile().exists()) {
+//                    file.getParentFile().mkdirs()
+//                }
+//                def os = file.newOutputStream()
+//
+//                def is = zipFile.getInputStream(zipEntry)
+//                def len = -1
+//                def buffer = new byte[1024]
+//                while ((len = is.read(buffer)) != -1) {
+//                    os.write(buffer, 0, len)
+//                    os.flush()
+//                }
+//                os.close()
+//                is.close()
+//
+//                xmlFiles.put(zipEntry.name, file)
+//            }
+//        }
+//        return xmlFiles
+//    }
 
-        def zipFile = new ZipFile(apkFile)
-        def entrys = zipFile.entries()
+    static replaceFilesInApk(File apkFile, Map<String, File> allFiles) {
+        def is = null
+        def len = -1
+        def buffer = new byte[1024]
 
-        while (entrys.hasMoreElements()) {
-            def zipEntry = entrys.nextElement()
-            if (zipEntry.name.endsWith(".xml")) {
-                xmlEntrys.add(zipEntry)
-            }
-        }
-        return xmlEntrys.toArray()
-    }
-
-    static replaceFilesInApk(File apkFile, Map<String, File> xmlFiles, File arscFile) {
-        def zipFile = new ZipFile(apkFile)
-
-        final int skiCounts = xmlFiles.size() + 1
-        final int remainEntryCounts = zipFile.size() - skiCounts
-//        println("####### replaceFilesInApk entryCounts=" + remainEntryCounts)
-
-        def entryContents = new byte[remainEntryCounts][]
-        def entryNames = new String[remainEntryCounts]
-
-        //把出了resources.arsc之外的文件读取出来保存到entryContents二维数组中
-        def index = 0
-        def entrys = zipFile.entries()
-        while (entrys.hasMoreElements()) {
-            def zipEntry = entrys.nextElement()
-
-//            println("### index=" + index + "  " + zipEntry.name)
-            if (zipEntry.name.equals(arscFile.name)) {
-                continue
-            }
-
-            def skip = false
-            for(Map.Entry<String,File> entry:xmlFiles.entrySet()){
-                if(entry.key.equals(zipEntry.name)){
-                    skip = true
-                    break
-                }
-            }
-
-            if (skip) continue
-
-//            println("### index2=" + index + "   " + zipEntry.name)
-
-            entryNames[index] = zipEntry.name
-            entryContents[index] = new byte[zipEntry.size]
-            zipFile.getInputStream(zipEntry).read(entryContents[index])
-            index++
-        }
-
-//        println("####################")
         def zos = new ZipOutputStream(new FileOutputStream(apkFile))
-        for (int i = 0; i < remainEntryCounts; i++) {
-            zos.putNextEntry(new ZipEntry(entryNames[i]))
-            zos.write(entryContents[i])
-            zos.closeEntry()
-        }
+        //replace files
+        allFiles.each { fileEntry ->
+            zos.putNextEntry(new ZipEntry(fileEntry.key))
 
-        //replace arscFile
-        zos.putNextEntry(new ZipEntry(arscFile.name))
-        def buffer = new byte[arscFile.size()]
-        arscFile.withInputStream {
-            zos.write(buffer, 0, it.read(buffer))
-        }
-        zos.closeEntry()
-
-        //replace xml files
-        xmlFiles.each { xmlFileEntry ->
-            zos.putNextEntry(new ZipEntry(xmlFileEntry.key))
-            buffer = new byte[xmlFileEntry.value.size()]
-            xmlFileEntry.value.withInputStream {
-                zos.write(buffer, 0, it.read(buffer))
+            is = fileEntry.value.newInputStream()
+            while ((len = is.read(buffer)) != -1) {
+                zos.write(buffer, 0, len)
+                zos.flush()
             }
+            is.close()
             zos.closeEntry()
         }
 
