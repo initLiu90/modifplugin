@@ -50,6 +50,13 @@ final class Utils {
         return result;
     }
 
+    static byte[] short2ByteArray(short value) {
+        byte[] result = new byte[2];
+        result[1] = (byte) ((value >> 8) & 0xFF);
+        result[0] = (byte) (value & 0xFF);
+        return result;
+    }
+
     static String packageName2Path(String packageName) {
         return packageName.replace('.', File.separator)
     }
