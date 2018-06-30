@@ -75,7 +75,10 @@ class ModifyArscR implements Plugin<Project> {
 
     def modifyArsc(File arscFile, int packageId) {
 //        Log.log("modifyArsc", arscFile.absolutePath)
-        ArscUtils.changeArscPackageId(arscFile, packageId)
+//        ArscUtils.changeArscPackageId(arscFile, packageId)
+        ArscFile arsc = new ArscFile(arscFile)
+        arsc.modifyArsc(packageId)
+        arsc.close()
     }
 
     def modifyXml(Map<String, File> xmlFiles, int packageId) {

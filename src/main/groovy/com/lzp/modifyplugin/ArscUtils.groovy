@@ -7,8 +7,9 @@ import java.util.zip.ZipFile;
 
 /**
  * Created by lillian on 2018/6/24.
+ * This Class is Deprecated. Please use ArscFile instead.
  */
-
+@Deprecated
 public class ArscUtils {
     private static def LIBRARY_HEADER_SIZE = 0x0C
     private static def LIBRARY_ENTRY_SIZE = 260 // packageId(4), packageName(256)
