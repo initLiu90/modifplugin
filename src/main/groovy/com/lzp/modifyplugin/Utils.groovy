@@ -50,7 +50,7 @@ final class Utils {
         return result;
     }
 
-    static byte[] short2ByteArray(short value) {
+    static byte[] short2ByteArray(int value) {
         byte[] result = new byte[2];
         result[1] = (byte) ((value >> 8) & 0xFF);
         result[0] = (byte) (value & 0xFF);
