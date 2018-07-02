@@ -23,3 +23,6 @@ modify{
 }
 
 ```
+
+Resoures.arsc parse
+[ArscParser](https://github.com/initLiu90/ArscParser)
