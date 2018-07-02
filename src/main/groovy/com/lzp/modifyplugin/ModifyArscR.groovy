@@ -3,8 +3,6 @@ package com.lzp.modifyplugin
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
-import java.lang.reflect.Field
-
 class ModifyArscR implements Plugin<Project> {
 
     private static final String FD_RES = "res"
@@ -23,50 +21,59 @@ class ModifyArscR implements Plugin<Project> {
         project.extensions.create('modify', ModifyExtension.class)
 
         project.afterEvaluate {
-            project.tasks.all { task ->
-                if (task.name.contains("process") && task.name.contains("Resources")) {
-                    task.doLast {
-                        if (project.modify.packageId == null) return
+            project.android.applicationVariants.all { variant ->
+                def variantName = variant.name.capitalize()
+//                Log.log('variantName', variantName)
+                def task = project.tasks["process${variantName}Resources"]
+                task.doLast {
+                    if (project.modify.packageId == null) return
 
-                        def packageId = Integer.decode(project.modify.packageId)
-                        println("######## new package id=" + project.modify.packageId)
+                    File resPackageOutputFolder
+                    File resOutBaseNameFile
+                    File sourceOutputDir = task.sourceOutputDir
+                    File textSymbolOutputFile
 
-                        //0x00~0x7f之间 0x00(SharedLibrary)、0x01(System)、0x7f(App/AppFeature)
-                        if (packageId > 1 && packageId < 127) {
-                            def start = task.name.indexOf("process") + "process".length()
-                            def end = task.name.indexOf("Resources")
-                            def type = task.name.substring(start, end).toLowerCase()
+                    if (task.hasProperty('resPackageOutputFolder')) {
+                        //com.android.tools.build:gradle:3.+
+                        resPackageOutputFolder = task.resPackageOutputFolder
+                        resOutBaseNameFile = new File(resPackageOutputFolder, "resources-${variant.name}.ap_")
+                        textSymbolOutputFile = task.getTextSymbolOutputFile()
+                    } else if (task.hasProperty('packageOutputFile')) {
+                        //com.android.tools.build:gradle:2.+
+                        resPackageOutputFolder = task.packageOutputFile.getParentFile()
+                        resOutBaseNameFile = task.packageOutputFile
+                        textSymbolOutputFile = new File(task.textSymbolOutputDir,'R.txt')
+                    }
 
-                            def apkFileDir = project.getBuildDir().absolutePath + File.separator + FD_INTERMEDIATES + File.separator + FD_RES + File.separator + type
-//                            def apkFileDir = project.getBuildDir().absolutePath + File.separator + FD_INTERMEDIATES + File.separator + FD_RES
-                            def apkFile = new File(apkFileDir, "resources-" + type + ".ap_ ")
-                            println("######## apkFile=" + apkFile.getAbsolutePath())
+                    Log.log('resPackageOutputFolder', resPackageOutputFolder.absolutePath)
+                    Log.log('sourceOutputDir', sourceOutputDir.absolutePath)
 
-                            //extract all files from apk
-                            def allFiles = ApkFileUtils.extractFilesFromApk(apkFile)
-//                            allFiles.each { fileEntry ->
-//                                Log.log(fileEntry.key, fileEntry.value.absolutePath)
-//                            }
+                    def packageId = Integer.decode(project.modify.packageId)
+                    Log.log("package id", project.modify.packageId)
+                    //0x00~0x7f之间 0x00(SharedLibrary)、0x01(System)、0x7f(App/AppFeature)
+                    if (packageId > 1 && packageId < 127) {
+                        //extract all files from apk
+                        def allFiles = ApkFileUtils.extractFilesFromApk(resOutBaseNameFile)
 
-                            //change resources.arsc and apk file
-                            def arscFile = allFiles.get('resources.arsc')
-                            modifyArsc(arscFile, packageId)
+                        //change resources.arsc and apk file
+                        def arscFile = allFiles.get('resources.arsc')
+                        modifyArsc(arscFile, packageId)
 
-                            //change AndroidManifest.xml res目录下的所有xml文件
-                            def xmlFiles = [:]
-                            allFiles.each { entry ->
-                                entry.key.endsWith('.xml')
-                                xmlFiles.put(entry.key, entry.value)
-                            }
-                            modifyXml(xmlFiles, packageId)
-
-                            replaceFileInApk(apkFile, allFiles)
-
-                            //change R.java
-                            def rFileDir = new File(project.getBuildDir().absolutePath + File.separator + FD_GENERATED +
-                                    File.separator + FD_SOURCE + File.separator + FD_R + File.separator + type)
-                            modifyRFile(rFileDir, project.modify.packageId)
+                        //change AndroidManifest.xml res目录下的所有xml文件
+                        def xmlFiles = [:]
+                        allFiles.each { entry ->
+                            entry.key.endsWith('.xml')
+                            xmlFiles.put(entry.key, entry.value)
                         }
+                        modifyXml(xmlFiles, packageId)
+
+                        replaceFileInApk(resOutBaseNameFile, allFiles)
+
+                        //change R.java
+                        modifyRFile(sourceOutputDir, project.modify.packageId)
+
+                        //chnge R.txt
+                        modifyRTxt(textSymbolOutputFile, project.modify.packageId)
                     }
                 }
             }
@@ -92,6 +99,10 @@ class ModifyArscR implements Plugin<Project> {
 
         allFiles.each { fileEntry ->
             fileEntry.value.delete()
+        }
+        File resDir = new File(apkFile.getParentFile(), 'res')
+        if (resDir.exists() && resDir.isDirectory()) {
+            resDir.deleteDir()
         }
     }
 
@@ -123,5 +134,24 @@ class ModifyArscR implements Plugin<Project> {
 
         rFile.delete()
         tmpFile.renameTo(rFile)
+    }
+
+    private modifyRTxt(File textSymbolOutputFile, String packageId) {
+        def tmpFile = new File(textSymbolOutputFile.getParentFile(), 'R.txt_')
+        def writer = new BufferedWriter(new FileWriter(tmpFile))
+
+        textSymbolOutputFile.eachLine { line ->
+            def pos = -1
+            if ((pos = line.indexOf('0x7f')) != -1) {
+                def str = line.replace('0x7f', packageId)
+                writer.writeLine(str)
+            } else {
+                writer.writeLine(line)
+            }
+        }
+        writer.close()
+
+        textSymbolOutputFile.delete()
+        tmpFile.renameTo(textSymbolOutputFile)
     }
 }
